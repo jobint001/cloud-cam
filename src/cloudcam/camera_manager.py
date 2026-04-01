@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 import threading
 from typing import Literal
 
@@ -14,6 +15,17 @@ from cloudcam.config import Config
 logger = logging.getLogger(__name__)
 
 CamId = Literal["A", "B"]
+
+# Pick the fastest native camera backend for the current OS.
+# CAP_DSHOW  — Windows Direct Show  (avoids index-mapping issues on Windows)
+# CAP_AVFOUNDATION — macOS AVFoundation (required; cv2.VideoCapture with 0 uses it anyway)
+# CAP_ANY (0) — Linux and fallback
+if sys.platform == "win32":
+    _CAM_BACKEND = cv2.CAP_DSHOW
+elif sys.platform == "darwin":
+    _CAM_BACKEND = cv2.CAP_AVFOUNDATION
+else:
+    _CAM_BACKEND = cv2.CAP_ANY
 
 
 class CameraManager:
@@ -72,7 +84,7 @@ class CameraManager:
         """Return a list of device indices that successfully open."""
         available: list[int] = []
         for idx in range(max_index):
-            cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
+            cap = cv2.VideoCapture(idx, _CAM_BACKEND)
             if cap.isOpened():
                 available.append(idx)
             cap.release()
@@ -83,7 +95,7 @@ class CameraManager:
     # ------------------------------------------------------------------
 
     def _open_camera(self, cam_id: CamId, index: int) -> None:
-        cap = cv2.VideoCapture(index, cv2.CAP_DSHOW)
+        cap = cv2.VideoCapture(index, _CAM_BACKEND)
         if not cap.isOpened():
             logger.error("Camera %s (index %d) could not be opened.", cam_id, index)
             return

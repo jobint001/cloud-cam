@@ -39,26 +39,42 @@ Right cam ──►       │
 
 ## Requirements
 
-- Windows 10 / 11 (64-bit)
-- Python 3.10+
-- [OBS Studio](https://obsproject.com/) installed (free) — only the virtual camera driver is needed, OBS itself does not need to be running
+| | Windows | macOS |
+|---|---|---|
+| OS | Windows 10 / 11 (64-bit) | macOS 12 Monterey+ |
+| Python | 3.10+ | 3.10+ |
+| Virtual cam driver | [OBS Studio](https://obsproject.com/) | [OBS Studio](https://obsproject.com/) (v28+ has Virtual Camera built in) |
+
+> **Linux** is not officially supported yet — `pyvirtualcam` can write to a V4L2 loopback device but that path is untested.
 
 ---
 
 ## Installation
 
+### Windows
+
 ```powershell
-# 1. Clone
 git clone https://github.com/your-username/cloud-cam.git
 cd cloud-cam
-
-# 2. Create a virtual environment (optional but recommended)
 python -m venv .venv
 .venv\Scripts\Activate.ps1
-
-# 3. Install
 pip install -e .
 ```
+
+### macOS
+
+```bash
+git clone https://github.com/your-username/cloud-cam.git
+cd cloud-cam
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+```
+
+> **Camera permissions:** macOS will prompt for camera access the first time. If denied, go to  
+> System Settings → Privacy & Security → Camera and enable it for Terminal (or your Python executable).
+
+> **OBS Virtual Camera on macOS:** Open OBS once, click **Start Virtual Camera**, then close OBS. The driver stays registered. In your calling app select **OBS Virtual Camera**.
 
 Dependencies (`opencv-python`, `mediapipe`, `pyvirtualcam`, `pystray`, `Pillow`) are installed automatically.
 
@@ -68,13 +84,19 @@ Dependencies (`opencv-python`, `mediapipe`, `pyvirtualcam`, `pystray`, `Pillow`)
 
 ## Usage
 
+**Windows (PowerShell):**
 ```powershell
 python src/cloudcam/main.py
 ```
 
+**macOS / Linux (Terminal):**
+```bash
+python3 src/cloudcam/main.py
+```
+
 Or, if installed via `pip install -e .`:
 
-```powershell
+```bash
 cloud-cam
 ```
 
@@ -100,8 +122,8 @@ Settings are saved to `config.json` in the project root and can be changed live 
 
 **Find your camera indices** (run once):
 
-```powershell
-python -c "from cloudcam.camera_manager import CameraManager; print(CameraManager.enumerate_cameras())"
+```bash
+python3 -c "from cloudcam.camera_manager import CameraManager; print(CameraManager.enumerate_cameras())"
 ```
 
 **Tuning tips:**
