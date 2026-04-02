@@ -54,7 +54,7 @@ Right cam ──►       │
 ### Windows
 
 ```powershell
-git clone https://github.com/your-username/cloud-cam.git
+git clone https://github.com/jobint001/cloud-cam.git
 cd cloud-cam
 python -m venv .venv
 .venv\Scripts\Activate.ps1
@@ -64,7 +64,7 @@ pip install -e .
 ### macOS
 
 ```bash
-git clone https://github.com/your-username/cloud-cam.git
+git clone https://github.com/jobint001/cloud-cam.git
 cd cloud-cam
 python3 -m venv .venv
 source .venv/bin/activate
