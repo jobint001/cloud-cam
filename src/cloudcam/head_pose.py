@@ -134,7 +134,7 @@ class HeadPoseTracker:
 
         rmat, _ = cv2.Rodrigues(rvec)
         sy = np.sqrt(rmat[0, 0] ** 2 + rmat[1, 0] ** 2)
-        yaw   = float(np.degrees(np.arctan2(rmat[1, 0], rmat[0, 0]))) if sy >= 1e-6 else 0.0
+        yaw   = -float(np.degrees(np.arctan2(rmat[1, 0], rmat[0, 0]))) if sy >= 1e-6 else 0.0
         pitch = float(np.degrees(np.arctan2(-rmat[2, 0], sy)))
 
         return PoseResult(yaw=yaw, pitch=pitch, confidence=1.0)
