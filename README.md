@@ -81,18 +81,27 @@ pip install -e .
 
 ### Linux
 
-First, set up the `v4l2loopback` virtual camera device:
+Install the loopback driver and utilities:
 
 ```bash
 # Debian / Ubuntu
 sudo apt install v4l2loopback-dkms v4l2loopback-utils
 
 # Fedora
-sudo dnf install akmod-v4l2loopback
-
-# Load the module (creates /dev/videoN loopback devices)
-sudo modprobe v4l2loopback exclusive_caps=1 card_label="Cloud Cam"
+sudo dnf install akmod-v4l2loopback v4l2loopback-utils
 ```
+
+Load the module with **`exclusive_caps=1`** and a fixed device number:
+
+```bash
+sudo modprobe v4l2loopback exclusive_caps=1 video_nr=4 card_label="Cloud Cam"
+```
+
+> **Why `exclusive_caps=1`?** Most calling apps are Chromium-based (Chrome,
+> Brave, Slack, Teams, …). Chromium ignores V4L2 devices that also advertise an
+> *output* capability. With `exclusive_caps=1` the loopback reports
+> **output-only while idle** and flips to **capture-only** as soon as Cloud Cam
+> writes to it — which is what makes the app list it as a camera.
 
 Then clone and install:
 
@@ -104,10 +113,38 @@ source .venv/bin/activate
 pip install -e .
 ```
 
-> **Pick the loopback device:** after `modprobe`, find it with
-> `v4l2-ctl --list-devices` (look for the *Cloud Cam* label) and set
-> `vcam_device` in `config.json`, e.g. `"vcam_device": "/dev/video2"`.
-> Leave it empty to let `pyvirtualcam` auto-select the first loopback device.
+**Make the device persistent across reboots:**
+
+```bash
+echo 'options v4l2loopback exclusive_caps=1 video_nr=4 card_label="Cloud Cam"' \
+  | sudo tee /etc/modprobe.d/v4l2loopback.conf
+echo 'v4l2loopback' | sudo tee /etc/modules-load.d/v4l2loopback.conf
+sudo update-initramfs -u
+```
+
+**Verify the loopback** (`/dev/video4` in this example):
+
+```bash
+v4l2-ctl -d /dev/video4 --info | grep -E 'Video Capture|Video Output'
+# idle, Cloud Cam stopped       -> Video Output
+# while Cloud Cam is running    -> Video Capture
+```
+
+> **Point `config.json` at the device:** find it with `v4l2-ctl --list-devices`
+> (look for the *Cloud Cam* label) and set `vcam_device`, e.g.
+> `"vcam_device": "/dev/video4"`. Camera indices map to device numbers
+> (`/dev/video5` → index `5`), so set `camera_a`/`camera_b` accordingly.
+
+> **Startup order matters:** start **Cloud Cam first**, then open the calling
+> app. The virtual device only becomes visible once Cloud Cam is producing frames
+> (it flips from output-only to capture-only). Stop Cloud Cam with **Ctrl+C** —
+> force-killing it can leave the loopback stuck; reset with
+> `sudo modprobe -r v4l2loopback && sudo modprobe v4l2loopback exclusive_caps=1
+> video_nr=4 card_label="Cloud Cam"`.
+
+> **Using your phone as a camera:** apps such as **DroidCam** or **Iriun**
+> expose the phone as a `/dev/videoN` capture device (over Wi-Fi, USB tethering,
+> or USB debugging). Point `camera_a`/`camera_b` at that index.
 
 > **Tray backend:** `python-xlib` (installed automatically) gives an X11 tray
 > icon but, in the supported pystray version, **no menu** — so the config items

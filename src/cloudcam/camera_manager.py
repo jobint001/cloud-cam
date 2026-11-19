@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import sys
 import threading
+import time
 from typing import Literal
 
 import cv2
@@ -15,6 +16,11 @@ from cloudcam.config import Config
 logger = logging.getLogger(__name__)
 
 CamId = Literal["A", "B"]
+
+# Backoff between failed frame reads (a disconnected camera must not spin).
+_READ_RETRY_DELAY = 0.1
+# Minimum seconds between repeated "read failed" warnings.
+_READ_FAIL_LOG_INTERVAL = 5.0
 
 # Pick the fastest native camera backend for the current OS.
 # CAP_DSHOW  — Windows Direct Show  (avoids index-mapping issues on Windows)
@@ -114,10 +120,17 @@ class CameraManager:
         cap = self._caps.get(cam_id)
         if cap is None:
             return
+        last_warn = 0.0
         while not self._stop_event.is_set():
             ok, frame = cap.read()
             if not ok:
-                logger.warning("Camera %s read failed; retrying.", cam_id)
+                now = time.monotonic()
+                if now - last_warn >= _READ_FAIL_LOG_INTERVAL:
+                    logger.warning("Camera %s read failed; retrying.", cam_id)
+                    last_warn = now
+                # Back off so a disconnected camera doesn't spin the CPU or
+                # flood the log; the wait is interruptible for a clean stop.
+                self._stop_event.wait(_READ_RETRY_DELAY)
                 continue
             with self._locks[cam_id]:
                 self._frames[cam_id] = frame
