@@ -57,6 +57,9 @@ class Application:
     def __init__(self) -> None:
         self._cfg = cfg_module.load()
         self._shutdown = threading.Event()
+        self._signal_received = False      # set lock-free from signal handler
+        self._cleanup_lock = threading.Lock()
+        self._cleaned_up = False
         self._frame_queue: queue.Queue = queue.Queue(maxsize=8)
 
         # Core components
@@ -104,8 +107,10 @@ class Application:
             if hasattr(signal, "SIGTERM"):
                 signal.signal(signal.SIGTERM, self._on_signal)
             # Main thread just waits; Ctrl+C raises KeyboardInterrupt here.
-            while not self._shutdown.is_set():
+            while not self._shutdown.is_set() and not self._signal_received:
                 self._shutdown.wait(timeout=0.5)
+            if self._signal_received:
+                logger.info("SIGTERM received — shutting down.")
         except KeyboardInterrupt:
             logger.info("Ctrl+C received — shutting down.")
         finally:
@@ -115,8 +120,10 @@ class Application:
     # ------------------------------------------------------------------
 
     def _on_signal(self, signum: int, _frame: object) -> None:
-        logger.info("Signal %d received — shutting down.", signum)
-        self._shutdown.set()
+        # Signal handlers run in the main thread and may interrupt the
+        # Event's internal lock; only flip a plain flag here and let the
+        # main loop do the logging and synchronised shutdown work.
+        self._signal_received = True
 
     # ------------------------------------------------------------------
 
@@ -136,8 +143,12 @@ class Application:
         self._shutdown_all()
 
     def _shutdown_all(self) -> None:
-        if self._shutdown.is_set():
-            return   # already shutting down
+        # Guard cleanup with its own flag: a shutdown *request* (which sets
+        # ``_shutdown``) must not be mistaken for cleanup already performed.
+        with self._cleanup_lock:
+            if self._cleaned_up:
+                return
+            self._cleaned_up = True
         self._shutdown.set()
         logger.info("Shutting down.")
         self._tray.stop()

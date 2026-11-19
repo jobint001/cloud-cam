@@ -109,9 +109,12 @@ pip install -e .
 > `vcam_device` in `config.json`, e.g. `"vcam_device": "/dev/video2"`.
 > Leave it empty to let `pyvirtualcam` auto-select the first loopback device.
 
-> **Tray backend:** install `python-xlib` (installed automatically) for X11, or
-> `PyGObject` / an AppIndicator library for a native tray on GNOME/KDE. Without
-> one, Cloud Cam logs a warning and runs without a tray icon.
+> **Tray backend:** `python-xlib` (installed automatically) gives an X11 tray
+> icon but, in the supported pystray version, **no menu** — so the config items
+> and **Quit** are unreachable from the icon. For a full tray menu install
+> `PyGObject` / an AppIndicator library (e.g. `gir1.2-appindicator3-0.1` on
+> Debian/Ubuntu). Without any backend, Cloud Cam logs a warning and runs
+> headless.
 
 Dependencies (`opencv-python`, `mediapipe`, `pyvirtualcam`, `pystray`, `Pillow`) are installed automatically.
 
@@ -137,9 +140,14 @@ Or, if installed via `pip install -e .`:
 cloud-cam
 ```
 
-A small camera icon appears in your **system tray**. Cloud Cam is now running — open Zoom/Teams/Meet and select **OBS Virtual Camera** as your webcam.
+A small camera icon appears in your **system tray**. Cloud Cam is now running — open Zoom/Teams/Meet and select your webcam:
 
-**To stop:** press `Ctrl+C` in the terminal, or right-click the tray icon → **Quit**.
+- **Windows / macOS:** select **OBS Virtual Camera**.
+- **Linux:** select **Cloud Cam** (the `v4l2loopback` device label), or whatever
+  label you gave the loopback device.
+
+**To stop:** press `Ctrl+C` in the terminal (or `kill`/`systemctl stop` to send
+SIGTERM), or right-click the tray icon → **Quit**.
 
 ---
 

@@ -28,6 +28,10 @@ def _default_config_path() -> Path:
 
 _CONFIG_PATH = _default_config_path()
 
+# Historical repo-root location, still used on Windows/macOS and read once on
+# Linux as a fallback for installs created before the XDG move.
+_LEGACY_CONFIG_PATH = Path(__file__).resolve().parents[3] / "config.json"
+
 
 @dataclass
 class Config:
@@ -41,17 +45,33 @@ class Config:
     vcam_device: str = ""         # Linux: v4l2loopback device, e.g. /dev/video2
 
 
+def _config_candidates(path: Path):
+    """Yield config paths to try, newest location first."""
+    yield path
+    # On Linux, fall back to a pre-existing repo-root config so an upgrade
+    # does not silently reset camera selections to the defaults.
+    if (
+        path != _LEGACY_CONFIG_PATH
+        and not path.exists()
+        and _LEGACY_CONFIG_PATH.exists()
+    ):
+        logger.info("No config at %s; using legacy config %s.", path, _LEGACY_CONFIG_PATH)
+        yield _LEGACY_CONFIG_PATH
+
+
 def load(path: Path = _CONFIG_PATH) -> Config:
-    """Load config from *path*; return defaults if file is missing or malformed."""
-    if path.exists():
+    """Load config from *path*; return defaults if no file is found or parseable."""
+    for candidate in _config_candidates(path):
+        if not candidate.exists():
+            continue
         try:
-            raw = json.loads(path.read_text(encoding="utf-8"))
+            raw = json.loads(candidate.read_text(encoding="utf-8"))
             # Only accept known keys so unknown keys are silently ignored.
             known = {f for f in Config.__dataclass_fields__}
             filtered = {k: v for k, v in raw.items() if k in known}
             return Config(**filtered)
         except Exception as exc:
-            logger.warning("Could not parse %s (%s); using defaults.", path, exc)
+            logger.warning("Could not parse %s (%s); using defaults.", candidate, exc)
     return Config()
 
 
