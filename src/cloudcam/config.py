@@ -48,11 +48,14 @@ class Config:
 def _config_candidates(path: Path):
     """Yield config paths to try, newest location first."""
     yield path
-    # On Linux, fall back to a pre-existing repo-root config so an upgrade
-    # does not silently reset camera selections to the defaults.
+    # On Linux only, and only for the default location, fall back to a
+    # pre-existing repo-root config so an upgrade does not silently reset
+    # camera selections. Explicit paths and non-Linux loads never migrate.
     if (
-        path != _LEGACY_CONFIG_PATH
-        and not path.exists()
+        sys.platform.startswith("linux")
+        and path == _CONFIG_PATH
+        and _LEGACY_CONFIG_PATH != _CONFIG_PATH
+        and not _CONFIG_PATH.exists()
         and _LEGACY_CONFIG_PATH.exists()
     ):
         logger.info("No config at %s; using legacy config %s.", path, _LEGACY_CONFIG_PATH)

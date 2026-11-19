@@ -60,6 +60,7 @@ class Application:
         self._signal_received = False      # set lock-free from signal handler
         self._cleanup_lock = threading.Lock()
         self._cleaned_up = False
+        self._cleanup_done = threading.Event()
         self._frame_queue: queue.Queue = queue.Queue(maxsize=8)
 
         # Core components
@@ -146,15 +147,24 @@ class Application:
         # Guard cleanup with its own flag: a shutdown *request* (which sets
         # ``_shutdown``) must not be mistaken for cleanup already performed.
         with self._cleanup_lock:
-            if self._cleaned_up:
-                return
-            self._cleaned_up = True
+            owner = not self._cleaned_up
+            if owner:
+                self._cleaned_up = True
+        if not owner:
+            # Another caller is already stopping the components; wait for it
+            # to finish so callers never return while stop() calls are still
+            # running (e.g. so ``run()`` cannot exit mid-teardown).
+            self._cleanup_done.wait()
+            return
         self._shutdown.set()
         logger.info("Shutting down.")
-        self._tray.stop()
-        self._switcher.stop()
-        self._vcam.stop()
-        self._cam_mgr.stop()
+        try:
+            self._tray.stop()
+            self._switcher.stop()
+            self._vcam.stop()
+            self._cam_mgr.stop()
+        finally:
+            self._cleanup_done.set()
 
 
 def main() -> None:
