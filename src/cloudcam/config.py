@@ -5,12 +5,28 @@ from __future__ import annotations
 import json
 import logging
 import os
-from dataclasses import asdict, dataclass, field
+import sys
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-_CONFIG_PATH = Path(__file__).resolve().parents[3] / "config.json"
+
+def _default_config_path() -> Path:
+    """Return the platform-appropriate config.json location.
+
+    On Linux the install directory is often read-only, so config lives under
+    the XDG config dir (``$XDG_CONFIG_HOME/cloud-cam/config.json``, falling
+    back to ``~/.config/cloud-cam/config.json``).  Windows and macOS keep the
+    historical repo-root location.
+    """
+    if sys.platform.startswith("linux"):
+        base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
+        return Path(base) / "cloud-cam" / "config.json"
+    return Path(__file__).resolve().parents[3] / "config.json"
+
+
+_CONFIG_PATH = _default_config_path()
 
 
 @dataclass
@@ -22,6 +38,7 @@ class Config:
     fps: int = 30
     width: int = 1280
     height: int = 720
+    vcam_device: str = ""         # Linux: v4l2loopback device, e.g. /dev/video2
 
 
 def load(path: Path = _CONFIG_PATH) -> Config:
@@ -41,6 +58,7 @@ def load(path: Path = _CONFIG_PATH) -> Config:
 def save(cfg: Config, path: Path = _CONFIG_PATH) -> None:
     """Persist *cfg* to *path* as pretty-printed JSON."""
     try:
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
             json.dumps(asdict(cfg), indent=2, ensure_ascii=False),
             encoding="utf-8",

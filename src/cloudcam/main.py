@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import logging.handlers
 import queue
+import signal
 import sys
 import threading
 from pathlib import Path
@@ -99,6 +100,9 @@ class Application:
         tray_thread.start()
 
         try:
+            # SIGTERM (e.g. `systemctl stop`, `kill`) — common on Linux.
+            if hasattr(signal, "SIGTERM"):
+                signal.signal(signal.SIGTERM, self._on_signal)
             # Main thread just waits; Ctrl+C raises KeyboardInterrupt here.
             while not self._shutdown.is_set():
                 self._shutdown.wait(timeout=0.5)
@@ -107,6 +111,12 @@ class Application:
         finally:
             self._shutdown_all()
             tray_thread.join(timeout=3.0)
+
+    # ------------------------------------------------------------------
+
+    def _on_signal(self, signum: int, _frame: object) -> None:
+        logger.info("Signal %d received — shutting down.", signum)
+        self._shutdown.set()
 
     # ------------------------------------------------------------------
 
