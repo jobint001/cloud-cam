@@ -7,7 +7,14 @@ import threading
 from pathlib import Path
 from typing import Callable
 
-import pystray
+try:
+    import pystray
+
+    _PYSTRAY_ERROR: Exception | None = None
+except Exception as _exc:  # noqa: BLE001 - pystray raises ImportError when no
+    pystray = None            # Linux tray backend (Xlib/GTK/AppIndicator) is present
+    _PYSTRAY_ERROR = _exc
+
 from PIL import Image, ImageDraw
 
 from cloudcam import config as cfg_module
@@ -55,14 +62,29 @@ class TrayUI:
         self._icon: pystray.Icon | None = None
 
     def start(self) -> None:
-        """Run the tray icon event loop in the calling thread (blocks)."""
-        self._icon = pystray.Icon(
-            name="cloud-cam",
-            icon=_load_icon(),
-            title="Cloud Cam",
-            menu=self._build_menu(),
-        )
-        self._icon.run()
+        """Run the tray icon event loop in the calling thread (blocks).
+
+        On Linux a tray backend (Xlib, GTK or AppIndicator) is required.  If
+        none is available the method logs a warning and returns instead of
+        crashing, so the app can still run headless.
+        """
+        if pystray is None:
+            logger.warning(
+                "System tray unavailable (%s); running without a tray icon.",
+                _PYSTRAY_ERROR,
+            )
+            return
+        try:
+            self._icon = pystray.Icon(
+                name="cloud-cam",
+                icon=_load_icon(),
+                title="Cloud Cam",
+                menu=self._build_menu(),
+            )
+            self._icon.run()
+        except Exception as exc:  # noqa: BLE001 - e.g. no X display on Linux
+            logger.warning("System tray could not start: %s", exc)
+            self._icon = None
 
     def stop(self) -> None:
         if self._icon:

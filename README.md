@@ -39,13 +39,16 @@ Right cam ──►       │
 
 ## Requirements
 
-| | Windows | macOS |
-|---|---|---|
-| OS | Windows 10 / 11 (64-bit) | macOS 12 Monterey+ |
-| Python | 3.10+ | 3.10+ |
-| Virtual cam driver | [OBS Studio](https://obsproject.com/) | [OBS Studio](https://obsproject.com/) (v28+ has Virtual Camera built in) |
+| | Windows | macOS | Linux |
+|---|---|---|---|
+| OS | Windows 10 / 11 (64-bit) | macOS 12 Monterey+ | Any modern distro (X11/Wayland) |
+| Python | 3.10+ | 3.10+ | 3.10+ |
+| Virtual cam driver | [OBS Studio](https://obsproject.com/) | [OBS Studio](https://obsproject.com/) (v28+ has Virtual Camera built in) | `v4l2loopback` kernel module |
+| Tray backend | built-in | built-in | Xlib, GTK or AppIndicator (optional) |
 
-> **Linux** is not officially supported yet — `pyvirtualcam` can write to a V4L2 loopback device but that path is untested.
+> **Linux** support uses the `v4l2loopback` kernel module for the virtual camera.
+> The tray icon is optional — Cloud Cam runs headless (terminal only) if no tray
+> backend is available.
 
 ---
 
@@ -76,6 +79,43 @@ pip install -e .
 
 > **OBS Virtual Camera on macOS:** Open OBS once, click **Start Virtual Camera**, then close OBS. The driver stays registered. In your calling app select **OBS Virtual Camera**.
 
+### Linux
+
+First, set up the `v4l2loopback` virtual camera device:
+
+```bash
+# Debian / Ubuntu
+sudo apt install v4l2loopback-dkms v4l2loopback-utils
+
+# Fedora
+sudo dnf install akmod-v4l2loopback
+
+# Load the module (creates /dev/videoN loopback devices)
+sudo modprobe v4l2loopback exclusive_caps=1 card_label="Cloud Cam"
+```
+
+Then clone and install:
+
+```bash
+git clone https://github.com/jobint001/cloud-cam.git
+cd cloud-cam
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+```
+
+> **Pick the loopback device:** after `modprobe`, find it with
+> `v4l2-ctl --list-devices` (look for the *Cloud Cam* label) and set
+> `vcam_device` in `config.json`, e.g. `"vcam_device": "/dev/video2"`.
+> Leave it empty to let `pyvirtualcam` auto-select the first loopback device.
+
+> **Tray backend:** `python-xlib` (installed automatically) gives an X11 tray
+> icon but, in the supported pystray version, **no menu** — so the config items
+> and **Quit** are unreachable from the icon. For a full tray menu install
+> `PyGObject` / an AppIndicator library (e.g. `gir1.2-appindicator3-0.1` on
+> Debian/Ubuntu). Without any backend, Cloud Cam logs a warning and runs
+> headless.
+
 Dependencies (`opencv-python`, `mediapipe`, `pyvirtualcam`, `pystray`, `Pillow`) are installed automatically.
 
 > The MediaPipe face landmark model (~5 MB) is downloaded automatically on first run.
@@ -100,15 +140,20 @@ Or, if installed via `pip install -e .`:
 cloud-cam
 ```
 
-A small camera icon appears in your **system tray**. Cloud Cam is now running — open Zoom/Teams/Meet and select **OBS Virtual Camera** as your webcam.
+A small camera icon appears in your **system tray**. Cloud Cam is now running — open Zoom/Teams/Meet and select your webcam:
 
-**To stop:** press `Ctrl+C` in the terminal, or right-click the tray icon → **Quit**.
+- **Windows / macOS:** select **OBS Virtual Camera**.
+- **Linux:** select **Cloud Cam** (the `v4l2loopback` device label), or whatever
+  label you gave the loopback device.
+
+**To stop:** press `Ctrl+C` in the terminal (or `kill`/`systemctl stop` to send
+SIGTERM), or right-click the tray icon → **Quit**.
 
 ---
 
 ## Configuration
 
-Settings are saved to `config.json` in the project root and can be changed live from the **tray menu** (no restart needed).
+Settings are saved to `config.json` and can be changed live from the **tray menu** (no restart needed). On Linux the file lives in `$XDG_CONFIG_HOME/cloud-cam/config.json` (default `~/.config/cloud-cam/config.json`); on Windows and macOS it is in the project root.
 
 | Key | Default | Description |
 |---|---|---|
@@ -119,6 +164,7 @@ Settings are saved to `config.json` in the project root and can be changed live 
 | `fps` | `30` | Output frame rate |
 | `width` | `1280` | Output frame width |
 | `height` | `720` | Output frame height |
+| `vcam_device` | `""` | Linux only: v4l2loopback device (e.g. `/dev/video2`); empty = auto |
 
 **Find your camera indices** (run once):
 

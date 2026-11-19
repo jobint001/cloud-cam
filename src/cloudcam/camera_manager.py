@@ -19,11 +19,14 @@ CamId = Literal["A", "B"]
 # Pick the fastest native camera backend for the current OS.
 # CAP_DSHOW  — Windows Direct Show  (avoids index-mapping issues on Windows)
 # CAP_AVFOUNDATION — macOS AVFoundation (required; cv2.VideoCapture with 0 uses it anyway)
-# CAP_ANY (0) — Linux and fallback
+# CAP_V4L2 — Linux Video4Linux2 (explicit backend avoids GStreamer/FFmpeg probing)
+# CAP_ANY (0) — fallback
 if sys.platform == "win32":
     _CAM_BACKEND = cv2.CAP_DSHOW
 elif sys.platform == "darwin":
     _CAM_BACKEND = cv2.CAP_AVFOUNDATION
+elif sys.platform.startswith("linux"):
+    _CAM_BACKEND = cv2.CAP_V4L2
 else:
     _CAM_BACKEND = cv2.CAP_ANY
 

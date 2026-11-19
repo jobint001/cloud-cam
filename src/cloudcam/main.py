@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import logging.handlers
 import queue
+import signal
 import sys
 import threading
 from pathlib import Path
@@ -56,6 +57,10 @@ class Application:
     def __init__(self) -> None:
         self._cfg = cfg_module.load()
         self._shutdown = threading.Event()
+        self._signal_received = False      # set lock-free from signal handler
+        self._cleanup_lock = threading.Lock()
+        self._cleaned_up = False
+        self._cleanup_done = threading.Event()
         self._frame_queue: queue.Queue = queue.Queue(maxsize=8)
 
         # Core components
@@ -99,14 +104,27 @@ class Application:
         tray_thread.start()
 
         try:
+            # SIGTERM (e.g. `systemctl stop`, `kill`) — common on Linux.
+            if hasattr(signal, "SIGTERM"):
+                signal.signal(signal.SIGTERM, self._on_signal)
             # Main thread just waits; Ctrl+C raises KeyboardInterrupt here.
-            while not self._shutdown.is_set():
+            while not self._shutdown.is_set() and not self._signal_received:
                 self._shutdown.wait(timeout=0.5)
+            if self._signal_received:
+                logger.info("SIGTERM received — shutting down.")
         except KeyboardInterrupt:
             logger.info("Ctrl+C received — shutting down.")
         finally:
             self._shutdown_all()
             tray_thread.join(timeout=3.0)
+
+    # ------------------------------------------------------------------
+
+    def _on_signal(self, signum: int, _frame: object) -> None:
+        # Signal handlers run in the main thread and may interrupt the
+        # Event's internal lock; only flip a plain flag here and let the
+        # main loop do the logging and synchronised shutdown work.
+        self._signal_received = True
 
     # ------------------------------------------------------------------
 
@@ -126,14 +144,27 @@ class Application:
         self._shutdown_all()
 
     def _shutdown_all(self) -> None:
-        if self._shutdown.is_set():
-            return   # already shutting down
+        # Guard cleanup with its own flag: a shutdown *request* (which sets
+        # ``_shutdown``) must not be mistaken for cleanup already performed.
+        with self._cleanup_lock:
+            owner = not self._cleaned_up
+            if owner:
+                self._cleaned_up = True
+        if not owner:
+            # Another caller is already stopping the components; wait for it
+            # to finish so callers never return while stop() calls are still
+            # running (e.g. so ``run()`` cannot exit mid-teardown).
+            self._cleanup_done.wait()
+            return
         self._shutdown.set()
         logger.info("Shutting down.")
-        self._tray.stop()
-        self._switcher.stop()
-        self._vcam.stop()
-        self._cam_mgr.stop()
+        try:
+            self._tray.stop()
+            self._switcher.stop()
+            self._vcam.stop()
+            self._cam_mgr.stop()
+        finally:
+            self._cleanup_done.set()
 
 
 def main() -> None:

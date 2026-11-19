@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import queue
+import sys
 import threading
 import time
 
@@ -16,11 +17,28 @@ from cloudcam.config import Config
 logger = logging.getLogger(__name__)
 
 
+def _backend_hint() -> str:
+    """Return a platform-specific install hint for the virtual camera backend."""
+    if sys.platform.startswith("linux"):
+        return (
+            "Ensure the v4l2loopback kernel module is loaded:\n"
+            "  sudo modprobe v4l2loopback exclusive_caps=1 "
+            'card_label="Cloud Cam"\n'
+            "Install with: sudo apt install v4l2loopback-dkms v4l2loopback-utils\n"
+            "Then set 'vcam_device' in config.json to the loopback device "
+            "(e.g. /dev/video2)."
+        )
+    return (
+        "Ensure a virtual camera backend is installed "
+        "(OBS Virtual Camera or UnityCapture)."
+    )
+
+
 class VirtualCamWriter:
     """Reads BGR frames from *input_queue* and pushes them to the virtual cam.
 
-    Uses ``pyvirtualcam`` which supports the OBS Virtual Camera and
-    UnityCapture backends on Windows.
+    Uses ``pyvirtualcam``, which supports the OBS Virtual Camera and
+    UnityCapture backends on Windows, OBS on macOS, and v4l2loopback on Linux.
     """
 
     def __init__(
@@ -54,12 +72,18 @@ class VirtualCamWriter:
         fps = self._cfg.fps
         frame_interval = 1.0 / fps
 
+        # On Linux the loopback device is chosen explicitly; on other
+        # platforms pyvirtualcam auto-selects the backend.
+        device = getattr(self._cfg, "vcam_device", "") or None
+        kwargs: dict = {"device": device} if device else {}
+
         try:
             with pyvirtualcam.Camera(
                 width=target_w,
                 height=target_h,
                 fps=fps,
                 fmt=pyvirtualcam.PixelFormat.BGR,
+                **kwargs,
             ) as cam:
                 logger.info("Virtual camera opened: %s", cam.device)
                 while not self._stop_event.is_set():
@@ -81,7 +105,4 @@ class VirtualCamWriter:
                         cam.sleep_until_next_frame()
         except Exception as exc:
             logger.error("Virtual camera error: %s", exc)
-            logger.error(
-                "Ensure a virtual camera backend is installed "
-                "(OBS Virtual Camera or UnityCapture)."
-            )
+            logger.error(_backend_hint())
